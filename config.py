@@ -88,7 +88,7 @@ DAILY_TOPICS = [
 ]
 
 # ─── Paths ────────────────────────────────────────────────
-BASE_DIR = r"C:\Users\DELL\Documents\AfricanPulse"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CACHE_DIR = os.path.join(BASE_DIR, "cache")
 L30_CACHE_DIR = os.path.join(BASE_DIR, "cache", "last30days")
 DEEP_DIVE_CACHE_DIR = os.path.join(BASE_DIR, "cache", "deep_dive")

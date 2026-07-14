@@ -1,0 +1,14 @@
+# Test dependencies -- deliberately NOT `-r requirements.txt`, to keep CI fast.
+#
+# sentence-transformers (~1-2GB with PyTorch) is lazy-loaded only when
+# vector_store.embed() actually runs. The test suite mocks vector_store's
+# public functions (is_duplicate, get_africa_context) before any real
+# embedding call happens, so it's excluded here.
+#
+# turbovec IS required: vector_store.py imports it at module load time
+# (not lazy), but it's lightweight (numpy-only, no PyTorch).
+pytest>=8.0.0
+requests==2.31.0
+python-dotenv==1.0.0
+turbovec>=0.7.0
+numpy>=1.26.0

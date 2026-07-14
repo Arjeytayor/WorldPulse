@@ -80,15 +80,17 @@ def run_pipeline():
             script = script_humanized if script_humanized else script_orig
 
             # Build paths (topic_slug based on the search key for uniqueness)
+            import os
             topic_slug = topic.lower().replace(" ", "_")
             today = date.today().isoformat()
-            article_path = rf"C:\Users\DELL\Documents\AfricanPulse\outputs\articles\{today}_{topic_slug}.md"
-            script_path = rf"C:\Users\DELL\Documents\AfricanPulse\outputs\scripts\{today}_{topic_slug}_script.md"
-            article_orig_path = rf"C:\Users\DELL\Documents\AfricanPulse\outputs\articles\{today}_{topic_slug}_original.md"
-            script_orig_path = rf"C:\Users\DELL\Documents\AfricanPulse\outputs\scripts\{today}_{topic_slug}_original_script.md"
+            articles_dir = os.path.join(config.OUTPUT_DIR, "articles")
+            scripts_dir = os.path.join(config.OUTPUT_DIR, "scripts")
+            article_path = os.path.join(articles_dir, f"{today}_{topic_slug}.md")
+            script_path = os.path.join(scripts_dir, f"{today}_{topic_slug}_script.md")
+            article_orig_path = os.path.join(articles_dir, f"{today}_{topic_slug}_original.md")
+            script_orig_path = os.path.join(scripts_dir, f"{today}_{topic_slug}_original_script.md")
 
             # Save even if Telegram fails (so we have the content)
-            import os
             os.makedirs(os.path.dirname(article_path), exist_ok=True)
             with open(article_path, "w", encoding="utf-8") as f:
                 f.write(article)

@@ -3,7 +3,7 @@
 import logging
 import os
 
-LOG_PATH = r"C:\Users\DELL\Documents\AfricanPulse\logs\errors.log"
+LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "errors.log")
 os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
 
 logging.basicConfig(

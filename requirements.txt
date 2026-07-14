@@ -4,6 +4,7 @@ python-telegram-bot==20.7
 APScheduler==3.10.4
 requests==2.31.0
 sentence-transformers>=2.7.0
+turbovec>=0.7.0
 numpy>=1.26.0
 pytz==2024.1
 python-dotenv==1.0.0

@@ -20,7 +20,8 @@ Global macro, micro & crypto news intelligence pipeline. Discovers trending topi
 
 ```bash
 # 1. Install dependencies
-pip install -r requirements.txt
+pip install -r requirements.txt        # runtime
+pip install -r requirements-dev.txt    # + pytest, for running tests
 
 # 2. Set up environment
 cp .env.example .env
@@ -135,7 +136,7 @@ In `config.py`, you can adjust:
 ## Directory Structure
 
 ```
-AfricanPulse/
+WorldPulse/
 ├── main.py                  # Scheduler entry point
 ├── run_once.py              # One-shot pipeline
 ├── run_fresh.py             # Fresh start (clears index)
@@ -154,10 +155,17 @@ AfricanPulse/
 ├── posts.py                 # Social publishing
 ├── vector_store.py          # Vector indexing
 ├── logger.py                # Logging
-├── requirements.txt         # Dependencies
+├── tests/                   # pytest suite (pure logic, vector_store mocked)
+├── .github/
+│   └── workflows/
+│       └── ci.yml           # GitHub Actions CI (compile check + pytest)
+├── requirements.txt         # Runtime dependencies
+├── requirements-dev.txt     # Lean test dependencies (no PyTorch)
+├── pytest.ini
+├── LICENSE
 ├── .env.example             # Env template
 ├── .gitignore               # Git ignore rules
-├── archive/                 # Archived test/development files
+├── archive/                 # Archived dev/test files (gitignored, local only)
 │   ├── test_agent_reach.py
 │   ├── test_nim.py
 │   ├── test_pipeline.py
@@ -188,3 +196,20 @@ Every source uses a 3-tier fallback hierarchy — if one method fails, it silent
 | **Web** | Jina Reader | Raw fetch + HTML strip | — |
 
 Only `yt-dlp` needs installation on most systems (`winget install yt-dlp`). The rest are optional.
+
+---
+
+## Testing
+
+```bash
+pip install -r requirements-dev.txt
+pytest -q
+```
+
+Covers `topic_discoverer.py` (regex/scoring logic), `topic_scorer.py` (with `vector_store` mocked), `humanizer.py`, and `telegram_bot.py`'s message-splitting — no network calls, no API keys, no heavy ML dependencies required. `requirements-dev.txt` deliberately skips `sentence-transformers` (it's lazy-loaded only when embeddings actually run, which the test suite avoids by mocking around `vector_store`), so CI stays fast. CI runs this suite plus a compile check on every push and PR.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).

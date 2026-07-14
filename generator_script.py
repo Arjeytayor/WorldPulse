@@ -8,7 +8,7 @@ from nim_client import generate_text
 from vector_store import get_africa_context
 from logger import logger
 
-SCRIPT_OUTPUT_DIR = r"C:\Users\DELL\Documents\AfricanPulse\outputs\scripts"
+SCRIPT_OUTPUT_DIR = os.path.join(config.OUTPUT_DIR, "scripts")
 
 SCRIPT_SYSTEM_PROMPT = """\
 You write YouTube Shorts scripts for "WorldPulse" — a global finance and macro

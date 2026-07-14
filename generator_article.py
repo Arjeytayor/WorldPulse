@@ -8,7 +8,7 @@ from nim_client import generate_text
 from vector_store import get_africa_context, add_content
 from logger import logger
 
-ARTICLE_OUTPUT_DIR = r"C:\Users\DELL\Documents\AfricanPulse\outputs\articles"
+ARTICLE_OUTPUT_DIR = os.path.join(config.OUTPUT_DIR, "articles")
 
 ARTICLE_SYSTEM_PROMPT = """\
 You are the writer behind "WorldPulse" — a sharp, global finance and macro

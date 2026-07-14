@@ -15,8 +15,8 @@ import numpy as np
 from turbovec import IdMapIndex
 
 from logger import logger
+from config import INDEX_DIR
 
-INDEX_DIR = r"C:\Users\DELL\Documents\AfricanPulse\vector_index"
 CONTENT_INDEX_PATH = os.path.join(INDEX_DIR, "content")
 AFRICA_INDEX_PATH = os.path.join(INDEX_DIR, "africa_context")
 AFRICA_TEXTS_PATH = os.path.join(INDEX_DIR, "africa_context_texts.json")
