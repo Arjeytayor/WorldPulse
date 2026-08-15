@@ -5,8 +5,13 @@ from datetime import date
 from logger import logger
 
 
-def run_pipeline():
-    """Full daily pipeline — fetch, score, deep-dive, generate, deliver."""
+def run_pipeline() -> int:
+    """Full daily pipeline — fetch, score, deep-dive, generate, deliver.
+
+    Returns the number of topics that produced content. Raises on failure so
+    callers (``run_once.py``, cron) see a non-zero exit code — a scheduled run
+    that cannot report failure is indistinguishable from one that succeeded.
+    """
     from research import fetch_all_briefs, cleanup_old_cache
     from topic_scorer import pick_best_topics
     from generator_article import generate_article
@@ -30,7 +35,7 @@ def run_pipeline():
         best_topics = pick_best_topics(all_research, max_picks=2)
         if not best_topics:
             logger.warning("No topics passed deduplication — skipping today")
-            return
+            return 0
 
         picked_count = len(best_topics)
         logger.info(f"Selected {picked_count} topics for content generation")
@@ -52,6 +57,7 @@ def run_pipeline():
                 research["_deep_dive_fired"] = False
 
         # ── Step 4: Generate content ──
+        generated_count = 0
         for research in best_topics:
             topic = research.get("_topic", "")
             display_topic = research.get("_headline", topic)
@@ -102,6 +108,8 @@ def run_pipeline():
                 f.write(article_orig)
             with open(script_orig_path, "w", encoding="utf-8") as f:
                 f.write(script_orig)
+
+            generated_count += 1
 
             # ── Step 5: Build briefing card ──
             score = research.get("_score", 0)
@@ -172,12 +180,28 @@ Content ready below 👇"""
                 except Exception:
                     logger.error("X post failed", exc_info=True)
 
+        # ── Step 7b: A run that produced nothing is a failed run ──
+        # Every per-topic failure above only logs and `continue`s, so without
+        # this check the pipeline reaches "completed successfully" having
+        # written zero files — the exact failure a dead model pool produces.
+        if generated_count == 0:
+            raise RuntimeError(
+                f"Pipeline generated no content: {picked_count} topic(s) selected, "
+                f"0 produced both an article and a script. Check model availability "
+                f"with nim_client.health_check()."
+            )
+
         # ── Step 8: Cleanup ──
         cleanup_old_cache(days=7)
-        logger.info("=== WorldPulse pipeline completed successfully ===")
+        logger.info(
+            f"=== WorldPulse pipeline completed successfully — "
+            f"{generated_count}/{picked_count} topics generated ==="
+        )
+        return generated_count
 
     except Exception:
         logger.error("Pipeline top-level failure", exc_info=True)
+        raise
 
 
 def start():
