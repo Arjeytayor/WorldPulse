@@ -57,27 +57,33 @@ def _save_cache(prompt: str, model: str, data: dict):
 
 # ── Model pool & task routing ─────────────────────────────
 
-# ── Model pool — data-driven picks from research on all 40 working models ──
-# Article  → largest, best reasoning (675B Mistral > 122B Qwen > 70B LLaMA)
-# Script   → fastest good-quality (DeepSeek flash > 70B LLaMA > creative 70B)
-# Synthesis → smallest, cheapest viable (3B > 8B)
+# ── Model pool — every entry verified callable on this API key (2026-08-14) ──
+# NVIDIA retires NIM models on a rolling basis and a retired model returns
+# 410 Gone. The previous pool lost 5 of 8 models to EOLs between Jul 20 and
+# Aug 7, 2026; the pipeline only kept working because a live model happened to
+# sit further down each list, so every generation burned dead calls with
+# exponential backoff first. Re-verify with health_check() when quality drops.
+#
+# Article   → best long-form reasoning, 70B tier throughout
+# Script    → fastest good-quality first
+# Synthesis → smallest viable; summaries do not need a large model
 MODEL_POOL: Final[dict[str, list[str]]] = {
     "article": [
-        "mistralai/mistral-large-3-675b-instruct-2512",  # 675B — 9.4/10 quality, best long-form
-        "qwen/qwen3.5-122b-a10b",                        # sweet spot: 122B, fast, nearly 397B quality
-        "meta/llama-3.3-70b-instruct",                   # real writers prefer this over Maverick
+        "meta/llama-3.3-70b-instruct",                   # strongest long-form of the live set
+        "meta/llama-3.1-70b-instruct",                   # 3.8s, same tier
+        "mistralai/mistral-nemotron",                    # 1.4s, different family — real diversity
     ],
     "script": [
-        "deepseek-ai/deepseek-v4-flash",                  # 98 tok/s, $0.14/M — fastest
+        "deepseek-ai/deepseek-v4-flash-0731",            # 7.4s — dated pin; unpinned alias was EOL'd Aug 7
         "meta/llama-3.3-70b-instruct",                   # proven for creative/narrative
-        "abacusai/dracarys-llama-3.1-70b-instruct",      # tuned for engaging, hook-first content
+        "mistralai/mistral-nemotron",                    # 1.4s
     ],
     "synthesis": [
-        "meta/llama-3.2-3b-instruct",                      # 3B — dirt cheap, sufficient for summaries
-        "meta/llama-3.1-8b-instruct",                      # tested, works
+        "meta/llama-3.1-8b-instruct",                    # 0.4s — replaces llama-3.2-3b (94s timeout)
+        "mistralai/mistral-nemotron",                    # 1.4s
     ],
     "fallback": [
-        "meta/llama-3.1-8b-instruct",
+        "meta/llama-3.1-8b-instruct",                    # 0.4s, still live
     ],
 }
 
@@ -86,6 +92,10 @@ MODEL_POOL: Final[dict[str, list[str]]] = {
 _MIN_DELAY_BETWEEN_CALLS = 1.6  # seconds
 _last_call_time = threading.Lock()
 _last_call_timestamp: float = 0.0
+
+# Hard ceiling on a single NIM request. Well above the ~8s worst case measured
+# across the live pool, low enough that a hung model fails over quickly.
+_REQUEST_TIMEOUT = 90.0  # seconds
 
 # Max tokens per task
 _TASK_MAX_TOKENS: Final[dict[str, int]] = {
@@ -119,9 +129,15 @@ def _call_nim(prompt: str, model: str, max_tokens: int, temperature: float = 0.7
             time.sleep(wait)
         _last_call_timestamp = time.time()
 
+    # timeout: the SDK default is 600s. NIM models intermittently hang, and an
+    # unattended cron run must not stall for ten minutes on one bad call.
+    # max_retries=0: this function runs its own retry loop below; leaving the
+    # SDK default of 2 would compound to up to 9 attempts per model.
     client = openai.OpenAI(
         base_url=config.NIM_BASE_URL,
         api_key=config.NVIDIA_NIM_API_KEY,
+        timeout=_REQUEST_TIMEOUT,
+        max_retries=0,
     )
 
     # ── Exponential backoff on 429 ──────────────────

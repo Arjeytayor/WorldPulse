@@ -7,13 +7,6 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 # ─── API Keys ──────────────────────────────────────────────
-# free-claude-code proxy (NVIDIA NIM → Kimi-K2)
-# The proxy runs at http://127.0.0.1:8082 by default.
-# ANTHROPIC_API_KEY  = proxy auth token (whatever you set as ANTHROPIC_AUTH_TOKEN)
-# ANTHROPIC_BASE_URL = proxy base URL (e.g. http://127.0.0.1:8082)
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "")
-
 # NVIDIA NIM (build.nvidia.com) — primary LLM provider
 NVIDIA_NIM_API_KEY = os.environ.get("NVIDIA_NIM_API_KEY", "")
 NIM_BASE_URL = os.environ.get("NIM_BASE_URL", "https://integrate.api.nvidia.com/v1")
@@ -121,8 +114,6 @@ MAX_RETRIES = 3
 RETRY_BASE_DELAY = 1.0  # seconds
 
 # ─── LLM Settings ────────────────────────────────────────
-# NOTE: If using the NIM proxy, model name is remapped by the proxy.
-# We use a valid Anthropic model string for correctness.
-DEFAULT_MODEL = "claude-sonnet-4-6"  # Proxy remaps this to nvidia_nim/moonshotai/kimi-k2.6
+# Model selection lives in nim_client.MODEL_POOL, routed per task.
 ARTICLE_MAX_TOKENS = 1500
 SCRIPT_MAX_TOKENS = 600
