@@ -476,7 +476,14 @@ def deep_dive(topic: str, brief: dict) -> dict:
     tweets = fetch_twitter(search_query, limit=8)
     reddit_posts = fetch_reddit(search_query, subreddit=_pick_subreddit(topic), limit=4)
     youtube_transcript = ""
-    top_video = brief.get("youtube", [{}])[0].get("url", "")
+    # ``brief["youtube"]`` is always *present* but every real producer sets it
+    # to [] (news_client.py:106, research.py:42) -- nothing populates it yet.
+    # A ``.get(key, default)`` default never fires for a key that exists, so
+    # the old ``[{}]`` fallback was dead code and this indexed an empty list on
+    # every real deep dive. Only the test fixtures supplied a non-empty list,
+    # which is why the tests passed while production raised IndexError.
+    videos = brief.get("youtube") or []
+    top_video = videos[0].get("url", "") if videos else ""
     if top_video:
         youtube_transcript = fetch_youtube_transcript(top_video)
 

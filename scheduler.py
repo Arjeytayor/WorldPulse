@@ -48,9 +48,25 @@ def run_pipeline() -> int:
 
             if engagement >= DEEP_DIVE_THRESHOLD:
                 logger.info(f"Topic '{display_topic}' (engagement={engagement}) — firing Agent-Reach deep dive")
-                raw = deep_dive(topic, research)
-                research["_deep_dive"] = raw
-                research["_deep_dive_fired"] = True
+                # The deep dive is enrichment, not a requirement: it scrapes
+                # third-party sources (Nitter, Reddit, YouTube captions) that
+                # change shape or disappear without notice. Letting it raise
+                # here aborted the entire run — including the topics that never
+                # needed a deep dive — so a supplementary source could take the
+                # pipeline down. Degrade to a normal run instead; Step 7b still
+                # fails the run if nothing at all gets generated.
+                try:
+                    raw = deep_dive(topic, research)
+                    research["_deep_dive"] = raw
+                    research["_deep_dive_fired"] = True
+                except Exception:
+                    logger.error(
+                        f"Deep dive failed for '{display_topic}' — "
+                        f"continuing without it",
+                        exc_info=True,
+                    )
+                    research["_deep_dive"] = {}
+                    research["_deep_dive_fired"] = False
             else:
                 logger.info(f"Topic '{display_topic}' (engagement={engagement}) — deep dive skipped (below threshold)")
                 research["_deep_dive"] = {}
