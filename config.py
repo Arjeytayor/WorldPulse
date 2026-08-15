@@ -14,6 +14,22 @@ NIM_BASE_URL = os.environ.get("NIM_BASE_URL", "https://integrate.api.nvidia.com/
 # Optional: Perplexity API key for AI-enhanced research synthesis
 PERPLEXITY_API_KEY = os.environ.get("PERPLEXITY_API_KEY", "")
 
+# Reddit OAuth — app-only read access. Unauthenticated .json endpoints now
+# return 403, so without these every Reddit source is silently skipped.
+# Register a "script" app at https://www.reddit.com/prefs/apps
+REDDIT_CLIENT_ID = os.environ.get("REDDIT_CLIENT_ID", "")
+REDDIT_CLIENT_SECRET = os.environ.get("REDDIT_CLIENT_SECRET", "")
+REDDIT_USER_AGENT = os.environ.get(
+    "REDDIT_USER_AGENT", "windows:worldpulse:1.0 (by /u/worldpulse)"
+)
+
+# Reddit's Atom feeds are the only free path left without approved API access,
+# but they rate-limit to ~10 req/min, so reading the subreddit list costs about
+# 6 minutes and still loses a few feeds to 429. Worth it for the retail-sentiment
+# topics Google News does not surface; set false to skip Reddit entirely.
+# Ignored when OAuth credentials are set — those are faster and unthrottled.
+USE_REDDIT_RSS = os.environ.get("USE_REDDIT_RSS", "true").lower() in ("1", "true", "yes")
+
 # Telegram delivery
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
@@ -93,7 +109,14 @@ LOG_DIR = os.path.join(BASE_DIR, "logs")
 DUPLICATE_THRESHOLD = 0.92   # turbovec similarity score above which a topic is skipped
 MIN_TOPIC_SCORE = 0.3        # minimum combined score to include a topic
 MAX_DAILY_PICKS = 2          # max articles+scripts to generate per day
-DEEP_DIVE_THRESHOLD = 500    # last30days engagement score above which Agent-Reach fires (old behaviour)
+# Engagement score above which Agent-Reach fires. Calibrated 2026-08-15 against
+# 12 sampled topics under the velocity-based score in news_client. Observed
+# range 0 (Nigeria naira CBN, nothing published in a week) to 4398 (Middle East
+# conflict oil risk, 48 articles in 24h); median 266. 800 fires on roughly the
+# top third -- genuinely breaking stories rather than a fixed quota.
+# The previous value of 500 was unreachable: the old formula's ceiling without
+# Reddit was 400, so deep dives never ran at all.
+DEEP_DIVE_THRESHOLD = 800
 
 # ─── Feature toggles ──────────────────────────────────────
 # Humanizer pass: if True, both original + humanized are saved.

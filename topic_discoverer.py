@@ -214,28 +214,59 @@ class TopicDiscoverer:
         return items
 
     def _fetch_reddit_hot(self, subreddit: str, limit: int = 20) -> list[dict]:
-        """Fetch hot posts from a subreddit."""
-        url = f"https://www.reddit.com/r/{subreddit}/hot.json?limit={limit}"
-        headers = {"User-Agent": "AfricanPulseBot/1.0 (by /u/AfricanPulseBot)"}
-        resp = self.session.get(url, headers=headers, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
+        """Fetch hot posts from a subreddit.
+
+        Two paths, because unauthenticated reddit.com/*.json now returns 403
+        and app registration is gated behind manual approval:
+
+        1. OAuth, when REDDIT_CLIENT_ID/SECRET are set — carries upvotes, so
+           low-engagement posts can be filtered out.
+        2. Atom RSS otherwise — still public, but carries no score field. The
+           upvote filter is skipped rather than applied against a fake 0, which
+           would discard every post.
+
+        Returns [] on failure; discovery falls back to Google News alone.
+        """
+        import reddit_client
+
+        if reddit_client.is_configured():
+            data = reddit_client.get(f"/r/{subreddit}/hot", {"limit": limit})
+            if not data:
+                return []
+
+            items = []
+            for child in data.get("data", {}).get("children", []):
+                post = child.get("data", {})
+                upvotes = post.get("ups", 0)
+                # Skip low-engagement posts
+                if upvotes < MIN_REDDIT_UPVOTES:
+                    continue
+                title = post.get("title", "")
+                if not title or len(title) < 15:
+                    continue
+                items.append({
+                    "title": self._clean_reddit_title(title, subreddit),
+                    "source": f"r/{subreddit}",
+                    "upvotes": upvotes,
+                    "origin": "reddit",
+                })
+            return items
+
+        # RSS path — headlines only, no engagement data.
+        import config
+        if not config.USE_REDDIT_RSS:
+            return []
 
         items = []
-        for child in data.get("data", {}).get("children", []):
-            post = child.get("data", {})
-            upvotes = post.get("ups", 0)
-            # Skip low-engagement posts
-            if upvotes < MIN_REDDIT_UPVOTES:
-                continue
-            title = post.get("title", "")
+        for entry in reddit_client.get_rss(f"/r/{subreddit}/hot/.rss")[:limit]:
+            title = entry.get("title", "")
             if not title or len(title) < 15:
                 continue
             items.append({
                 "title": self._clean_reddit_title(title, subreddit),
                 "source": f"r/{subreddit}",
-                "upvotes": upvotes,
-                "origin": "reddit",
+                "upvotes": 0,          # unavailable via RSS
+                "origin": "reddit-rss",
             })
         return items
 
