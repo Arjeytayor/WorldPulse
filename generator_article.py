@@ -5,7 +5,7 @@ from datetime import date
 
 import config
 from nim_client import generate_text
-from vector_store import get_africa_context, add_content
+from vector_store import get_africa_context, remember_topic
 from logger import logger
 
 ARTICLE_OUTPUT_DIR = os.path.join(config.OUTPUT_DIR, "articles")
@@ -167,7 +167,10 @@ def generate_article(research: dict) -> str:
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(article_text)
 
-        add_content([article_text])
+        # Record the topic, not the article: the next run's dedup check queries
+        # by topic, and storing the article instead is what made the check a
+        # no-op for months.
+        remember_topic(research.get("_topic", ""))
         return article_text
     except Exception:
         logger.error("Article generation failed", exc_info=True)

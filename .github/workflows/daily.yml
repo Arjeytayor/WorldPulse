@@ -1,0 +1,82 @@
+name: Daily run
+
+# 07:00 WAT (UTC+1) is 06:00 UTC. GitHub's scheduler is a best-effort queue,
+# not cron -- runs land late, typically 5-20 minutes, worst on the hour. So
+# this asks for 05:52 UTC and lets the drift carry it toward 06:00 UTC rather
+# than asking for 06:00 and always landing after it.
+on:
+  schedule:
+    - cron: "52 5 * * *"
+  workflow_dispatch:
+
+# A run takes ~20 min. If one is somehow still going when the next fires,
+# skip the new one -- two pipelines writing the same vector index would
+# corrupt the dedup state they both depend on.
+concurrency:
+  group: worldpulse-daily
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # Dedup state. cache/ and vector_index/ are gitignored and the runner is
+      # destroyed after every job, so without this the pipeline wakes up with
+      # no memory and re-generates yesterday's topic every single morning.
+      # The key is unique per run so the post-job save always fires; the
+      # restore-key prefix picks up the most recent previous run.
+      - name: Restore dedup state
+        uses: actions/cache@v4
+        with:
+          path: |
+            cache
+            vector_index
+          key: worldpulse-state-${{ github.run_id }}
+          restore-keys: worldpulse-state-
+
+      # sentence-transformers downloads all-MiniLM-L6-v2 (~90 MB) on first
+      # import. Cached separately from the dedup state because it never changes.
+      - name: Cache embedding model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-minilm-v1
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Secrets are scoped to the two steps that need them rather than the
+      # whole job. `pip install` executes setup code from every dependency;
+      # there is no reason for that code to run with the API keys in its
+      # environment.
+      - name: Run pipeline
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
+          NIM_BASE_URL: ${{ secrets.NIM_BASE_URL }}
+        run: python run_once.py
+
+      # run_once.py already alerts Telegram on failure, but only if the failure
+      # happened inside the pipeline. A dependency install that breaks, or a
+      # job the runner kills at the timeout, never reaches that handler.
+      - name: Alert on infrastructure failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -sS -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
+            -d "parse_mode=HTML" \
+            --data-urlencode "text=🚨 <b>WorldPulse workflow failed</b> — the job died outside the pipeline (install, timeout, or runner). Logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

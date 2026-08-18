@@ -38,7 +38,12 @@ def pick_best_topics(research_results: list[dict], max_picks: int = 2) -> list[d
     """
     filtered = []
     for result in research_results:
-        topic_text = result.get("synthesis", "") or result.get("_topic", "")
+        # Dedup on the topic, not the synthesis. The synthesis describes
+        # *today's* news about a subject, so it changes every day even when
+        # the subject does not -- two consecutive gold briefs share only 0.64
+        # similarity by synthesis but 0.87 by topic. The topic is the thing
+        # that is actually repeating.
+        topic_text = result.get("_topic", "") or result.get("synthesis", "")
         if not is_duplicate(topic_text):
             result["_score"] = score_topic(result)
             filtered.append(result)
