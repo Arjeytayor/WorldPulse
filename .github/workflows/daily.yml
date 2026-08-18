@@ -58,6 +58,13 @@ jobs:
       # whole job. `pip install` executes setup code from every dependency;
       # there is no reason for that code to run with the API keys in its
       # environment.
+      # vector_index/ is gitignored, so a runner that misses the cache has no
+      # Africa context index -- and get_africa_context() returns [] silently
+      # rather than failing, so the pipeline degrades invisibly. Seeding is
+      # idempotent and only costs the model load, which the cache above covers.
+      - name: Seed Africa context if missing
+        run: test -f vector_index/africa_context || python seed_context.py
+
       - name: Run pipeline
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
