@@ -205,6 +205,47 @@ def _nitter_scrape(query: str, limit: int) -> list[str]:
 #  Reddit
 # ═══════════════════════════════════════════════════════════
 
+def _parse_rdt_output(stdout: str) -> list[dict]:
+    """Extract posts from rdt-cli --json output.
+
+    Accepts the documented envelope ({"ok": ..., "data": [...]}), a bare list,
+    or JSON-lines, since the shape varies by rdt version. Returns [] for an
+    error envelope so the caller falls through to the next tier.
+    """
+    stdout = (stdout or "").strip()
+    if not stdout:
+        return []
+
+    def _as_posts(payload) -> list[dict]:
+        if isinstance(payload, list):
+            return [p for p in payload if isinstance(p, dict)]
+        if isinstance(payload, dict):
+            if payload.get("ok") is False:
+                return []
+            for key in ("data", "posts", "results", "items"):
+                value = payload.get(key)
+                if isinstance(value, list):
+                    return [p for p in value if isinstance(p, dict)]
+            return [payload] if payload.get("title") else []
+        return []
+
+    try:
+        return _as_posts(json.loads(stdout))
+    except json.JSONDecodeError:
+        pass
+
+    posts: list[dict] = []
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            posts.extend(_as_posts(json.loads(line)))
+        except json.JSONDecodeError:
+            continue  # human-readable noise, not a post
+    return posts
+
+
 def fetch_reddit(query: str, subreddit: str = "", limit: int = 5) -> list[dict]:
     """Search Reddit via real CLI -> JSON API."""
     cache_key = f"reddit_{query}_{subreddit}_{limit}"
@@ -216,26 +257,27 @@ def fetch_reddit(query: str, subreddit: str = "", limit: int = 5) -> list[dict]:
     source = "unknown"
 
     # ---- Tier 1: real rdt-cli (installed by agent-reach) --------
-    # NOTE: rdt requires auth. If unauthenticated, it will fail
-    # and the system will fall back to Tier 2 automatically.
+    # NOTE: rdt requires auth. Unauthenticated it returns
+    # {"ok": false, "error": {"code": "forbidden"}} and we fall through
+    # to Tier 2. It exits 0 even then, so check the payload, not the code.
     if _which("rdt"):
         try:
-            cmd = ["rdt", "search", query, "--max", str(limit)]
+            # -n, not --max: rdt-cli 0.4.1 has no --max and exits with a usage
+            # error, which made every Tier 1 Reddit call a no-op. --json is
+            # required too; without it the output is human-readable text that
+            # the parse below silently turned into title-only stubs.
+            cmd = ["rdt", "search", query, "-n", str(limit), "--json"]
             if subreddit:
                 cmd += ["--subreddit", subreddit]
             stdout = _run(cmd, timeout=30)
-            # rdt-cli may output JSON lines
-            lines = [ln for ln in stdout.splitlines() if ln.strip()]
-            for line in lines:
-                try:
-                    posts.append(json.loads(line))
-                except json.JSONDecodeError:
-                    posts.append({"title": line.strip(), "body": "", "upvotes": 0})
+            posts = _parse_rdt_output(stdout)
             if posts:
                 source = "rdt-cli"
                 logger.info(f"rdt-cli returned {len(posts)} posts for '{query}'")
         except Exception as exc:
-            logger.debug(f"rdt CLI failed (may need auth): {exc}")
+            # Info, not debug: the logger runs at INFO, so a debug line here is
+            # discarded -- which is how the --max bug survived unnoticed.
+            logger.info(f"rdt CLI unavailable ({exc}) — falling back")
 
     # ---- Tier 2: Reddit JSON API (public, no auth) ------------------
     if not posts:
