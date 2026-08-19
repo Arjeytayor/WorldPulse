@@ -54,10 +54,6 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # Secrets are scoped to the two steps that need them rather than the
-      # whole job. `pip install` executes setup code from every dependency;
-      # there is no reason for that code to run with the API keys in its
-      # environment.
       # vector_index/ is gitignored, so a runner that misses the cache has no
       # Africa context index -- and get_africa_context() returns [] silently
       # rather than failing, so the pipeline degrades invisibly. Seeding is
@@ -65,7 +61,11 @@ jobs:
       - name: Seed Africa context if missing
         run: test -f vector_index/africa_context || python seed_context.py
 
+      # Secrets are scoped to the steps that need them rather than the whole
+      # job. `pip install` executes setup code from every dependency; there is
+      # no reason for that code to run with the API keys in its environment.
       - name: Run pipeline
+        id: pipeline
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -76,8 +76,12 @@ jobs:
       # run_once.py already alerts Telegram on failure, but only if the failure
       # happened inside the pipeline. A dependency install that breaks, or a
       # job the runner kills at the timeout, never reaches that handler.
+      #
+      # Skip when the pipeline step itself failed -- it has already sent its own
+      # alert with the actual exception, and firing here too just means two
+      # notifications for one failure.
       - name: Alert on infrastructure failure
-        if: failure()
+        if: failure() && steps.pipeline.outcome != 'failure'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
